@@ -25,7 +25,7 @@ typedef struct Node {
 /* Function that can add a new element to the end of the linked-list */
 void add_element_to_collection(Node** head, Node** tail, int value) {
     // Allocate memory
-    Node* new_node = (Node*)malloc(sizeof(Node));
+    Node* new_node = (Node*)simple_malloc(sizeof(Node));
     
     if (!new_node) {
         // Memory allocation error handling
@@ -57,7 +57,7 @@ void remove_last_added_element(Node** head, Node** tail) {
             *head = NULL;
             *tail = NULL;
         }
-        free(to_remove);
+        simple_free(to_remove);
     }
 }
 
@@ -122,14 +122,14 @@ int main() {
     while (head) {
         Node* to_free = head;
         head = head->next;
-        free(to_free);
+        simple_free(to_free);
     }
 
     // Free allocated memory for the linked list
     Node* current = head;
     while (current) {
         Node* next = current->next;
-        free(current);
+        simple_free(current);
         current = next;
     } 
     //for testing
