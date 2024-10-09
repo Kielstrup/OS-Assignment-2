@@ -81,6 +81,7 @@ void* simple_malloc(size_t size) {
 
   size_t aligned_size = (size + 7) & ~7;;
   BlockHeader * search_start = current;
+  BlockHeader *prev_block = NULL; 
 
   do {
 
@@ -100,14 +101,18 @@ void* simple_malloc(size_t size) {
           current = GET_NEXT(current);
           continue;
          }
-
-      if (block_size - aligned_size < sizeof(BlockHeader) + MIN_SIZE) {
+      
+      size_t remaining_size = block_size - aligned_size - sizeof(BlockHeader);
+      //if (block_size - aligned_size >= sizeof(BlockHeader) + MIN_SIZE) {
+      if (remaining_size >= MIN_SIZE) {
           BlockHeader* new_block = (BlockHeader*)((uintptr_t)current + sizeof(BlockHeader) + aligned_size);
-          SET_NEXT(new_block, GET_NEXT(current));
+          SET_SIZE(new_block, remaining_size);
           SET_FREE(new_block, 1);
+          SET_NEXT(new_block, GET_NEXT(current));
           SET_NEXT(current, new_block);
       } 
         SET_FREE(current, 0);
+        printf("Allocating block at %p for size %zu\n", (void*)current, aligned_size);
         return (void *) (current->user_block);
       } 
     } 
@@ -171,6 +176,8 @@ void simple_free(void * ptr) {
     if (GET_FREE(next_block)) {
       SET_NEXT(block, GET_NEXT(next_block));
     }
+  } else {
+    printf("Invalid next_block: %p\n", next_block);
   }
 
   if (next_block >= first && next_block < memory_end) {
