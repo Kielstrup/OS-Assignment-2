@@ -80,35 +80,41 @@ void* simple_malloc(size_t size) {
   }
 
   size_t aligned_size = (size + 7) & ~7;;
-
   BlockHeader * search_start = current;
+
   do {
+
+    printf("Checking block at %pm size: %zu, free: %d\n", current, SIZE(current), GET_FREE(current));
  
     if (GET_FREE(current)) {
       size_t block_size = SIZE(current);
 
       /* Check if free block is large enough */
       if (block_size >= aligned_size) {
-        if (block_size - aligned_size < sizeof(BlockHeader) + MIN_SIZE) {
+        printf("Found a suitable block at %p with size %zu\n", current, block_size); 
+
+         // Ensure we're not overwriting dummy block
+         BlockHeader* next_block = GET_NEXT(current);
+         if (next_block == first) {
+          // Skip current block since it's a dummy block
+          current = GET_NEXT(current);
+          continue;
+         }
+
+      if (block_size - aligned_size < sizeof(BlockHeader) + MIN_SIZE) {
           BlockHeader* new_block = (BlockHeader*)((uintptr_t)current + sizeof(BlockHeader) + aligned_size);
           SET_NEXT(new_block, GET_NEXT(current));
           SET_FREE(new_block, 1);
-
           SET_NEXT(current, new_block);
-        } else {
-          SET_FREE(current, 0);
-        }
-
-        current = GET_NEXT(current);
-        
+      } 
+        SET_FREE(current, 0);
         return (void *) (current->user_block);
-      } else {
-        current = GET_NEXT(current);
-      }
-    } else {
+      } 
+    } 
       current = GET_NEXT(current);
-    }
   } while (current != search_start);
+
+  printf("No suitable block found for size %zu\n", aligned_size); 
 
  /* None found */
   return NULL;
@@ -125,21 +131,56 @@ void* simple_malloc(size_t size) {
  *
  */
 void simple_free(void * ptr) {
+  /*
+   if (ptr == NULL) return;
+
+    BlockHeader block = (BlockHeader *)((uintptr_t)ptr - sizeof(BlockHeader));
+
+    if (GET_FREE(block)) {
+        return; // Block is already free, ignore the free
+    }
+
+    SET_FREE(block, 1); // Mark the block as free
+    BlockHeader next_block = GET_NEXT(block);
+
+    if (GET_FREE(next_block)) {
+        SET_NEXT(block, GET_NEXT(next_block)); // Coalesce with next free block
+    }
+*/
+  
   if (ptr == NULL) return;
 
-  BlockHeader* block = (BlockHeader*)((uintptr_t)ptr - sizeof(BlockHeader));
+  BlockHeader* block = (BlockHeader *)((uintptr_t)ptr - sizeof(BlockHeader));
+
+  if ((uintptr_t)block < memory_start || (uintptr_t)block >= memory_end) {
+    printf("Invalid pointer passed to free: %p\n", ptr);
+    return; 
+  }
 
   if (GET_FREE(block)) {
+    printf("Double free detected at %p\n", ptr); 
     return;
   }
 
-  SET_NEXT(block, 1);
+  //SET_NEXT(block, 1);
+  SET_FREE(block, 1);
 
   BlockHeader* next_block = GET_NEXT(block);
 
-  if (GET_FREE(next_block)) {
-    SET_NEXT(block, GET_NEXT(next_block));
+  if ((uintptr_t)next_block >= (uintptr_t)first && (uintptr_t)next_block < memory_end) {
+    if (GET_FREE(next_block)) {
+      SET_NEXT(block, GET_NEXT(next_block));
+    }
   }
+
+  if (next_block >= first && next_block < memory_end) {
+      if (GET_FREE(next_block)) {
+          SET_NEXT(block, GET_NEXT(next_block));
+      }
+  } else {
+        printf("Invalid next_block: %p\n", next_block); 
+    }
+    
 }
 
 /* Include test routines */
