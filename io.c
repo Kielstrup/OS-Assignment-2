@@ -3,6 +3,7 @@
 #include <unistd.h>
 #include <stdlib.h>
 
+#include "mm.h"
 #include "io.h"
 
 /* Reads next char from stdin. If no more characters, it returns EOF */
@@ -65,7 +66,7 @@ int write_int(int n) {
         }
     }
 
-  char *buffer = (char *)malloc(length);
+  char *buffer = (char *)simple_malloc(length);
   if (!buffer) {
     return -1; // return error if memory allocation fails
   }
@@ -94,6 +95,6 @@ int write_int(int n) {
     bytes_written++;
   }
   
-  free(buffer); // Free the allocated memory. Because we use malloc!  
+  simple_free(buffer); // Free the allocated memory. Because we use malloc!  
   return bytes_written;  // Return the number of bytes written
 }

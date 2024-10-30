@@ -7,10 +7,12 @@
  */
 
 #include <stdint.h>
+#include <stdlib.h>  // Only included for EXIT_FAILURE
 
 #include "mm.h"
 
-
+extern const uintptr_t memory_start;
+extern const uintptr_t memory_end;
 
 /* Proposed data structure elements */
 
@@ -27,7 +29,6 @@ typedef struct header {
 #define SIZE(p)        (size_t)((uintptr_t)GET_NEXT(p) - (uintptr_t)(p) - sizeof(BlockHeader))  // Calculate block size
 #define MIN_SIZE (8)   // A block should have at least 8 bytes available for the user
 
-
 static BlockHeader * first = NULL;
 static BlockHeader * current = NULL;
 
@@ -37,28 +38,27 @@ static BlockHeader * current = NULL;
  *
  */
 void simple_init() {
-  uintptr_t aligned_memory_start = (memory_start + 7) & ~7;
-  uintptr_t aligned_memory_end   = memory_end & ~7;
-  BlockHeader* last;
+    uintptr_t aligned_memory_start = (memory_start + 7) & ~0x7; // Align to 8 bytes
+    uintptr_t aligned_memory_end = memory_end; // No need to align the end
 
-  if (first == NULL) {
-    /* Check that we have room for at least one free block and an end header */
-    if (aligned_memory_start + 2*sizeof(BlockHeader) + MIN_SIZE <= aligned_memory_end) {
-      // Initialize the first block
-      first = (BlockHeader*)aligned_memory_start;
-      SET_NEXT(first, (BlockHeader*)(aligned_memory_end - sizeof(BlockHeader))); // Set the last block as next
-      SET_FREE(first, 1);  // Mark first block as free
+    if (first == NULL) {
+        if (aligned_memory_start + sizeof(BlockHeader) + MIN_SIZE <= aligned_memory_end) {
+            // Initialize the first block
+            first = (BlockHeader *)aligned_memory_start;
+            SET_NEXT(first, (BlockHeader *)(aligned_memory_end - sizeof(BlockHeader))); // Last block
+            SET_FREE(first, 1); // Mark the first block as free
 
+            // Initialize the last block (dummy block)
+            BlockHeader *last = (BlockHeader *)(aligned_memory_end - sizeof(BlockHeader));
+            SET_NEXT(last, first); // Circular reference to first block
+            SET_FREE(last, 0); // Last block is always considered allocated
 
-      // Initialize the dummy block (last block)
-      last = (BlockHeader*)(aligned_memory_end - sizeof(BlockHeader));
-      SET_NEXT(last, first);  // Make the list circular by pointing to the first block
-      SET_FREE(last, 0);      // The dummy block is always considered allocated
-
-      // Set the current block to the first block
-      current = first;
+            current = first; // Set the current pointer to the first block
+        } else {
+            fprintf(stderr, "Not enough memory to initialize\n");
+            exit(EXIT_FAILURE);
+        }
     }
-  } 
 }
 
 
@@ -72,46 +72,46 @@ void simple_init() {
  * @retval Pointer to the start of the allocated memory or NULL if not possible.
  *
  */
+
 void* simple_malloc(size_t size) {
-  
-  if (first == NULL) {
-    simple_init();
-    if (first == NULL) return NULL;
-  }
-
-  size_t aligned_size = (size + 7) & ~7;;
-
-  BlockHeader * search_start = current;
-  do {
- 
-    if (GET_FREE(current)) {
-      size_t block_size = SIZE(current);
-
-      /* Check if free block is large enough */
-      if (block_size >= aligned_size) {
-        if (block_size - aligned_size < sizeof(BlockHeader) + MIN_SIZE) {
-          BlockHeader* new_block = (BlockHeader*)((uintptr_t)current + sizeof(BlockHeader) + aligned_size);
-          SET_NEXT(new_block, GET_NEXT(current));
-          SET_FREE(new_block, 1);
-
-          SET_NEXT(current, new_block);
-        } else {
-          SET_FREE(current, 0);
-        }
-
-        current = GET_NEXT(current);
-        
-        return (void *) (current->user_block);
-      } else {
-        current = GET_NEXT(current);
-      }
-    } else {
-      current = GET_NEXT(current);
+    if (first == NULL) {
+        simple_init(); // Initialize memory if not already done
+        if (first == NULL) return NULL;
     }
-  } while (current != search_start);
 
- /* None found */
-  return NULL;
+    size_t aligned_size = (size + 7) & ~0x7; // Align requested size
+    BlockHeader *search_start = current;
+
+    do {
+        if (GET_FREE(current)) {
+            size_t block_size = SIZE(current);
+
+            // Check if the free block is large enough
+            if (block_size >= aligned_size) {
+                // Check if we can split the block
+                if (block_size - aligned_size >= sizeof(BlockHeader) + MIN_SIZE) {
+                    BlockHeader *new_block = (BlockHeader *)((uintptr_t)current + sizeof(BlockHeader) + aligned_size);
+                    SET_NEXT(new_block, GET_NEXT(current));
+                    SET_FREE(new_block, 1); // New block is free
+
+                    SET_NEXT(current, new_block); // Update current block to point to the new block
+                    SET_FREE(current, 0); // Mark the current block as used
+                    printf("Allocating %zu bytes at %p\n", aligned_size, (void*)current->user_block); // Print when allocating
+                } else {
+                    SET_FREE(current, 0); // Mark the current block as used
+                    printf("Allocating %zu bytes at %p (no split)\n", aligned_size, (void*)current->user_block); // Print when allocating without splitting
+                }
+
+                void *allocated_memory = (void *)(current->user_block); // Return pointer to user block
+                current = GET_NEXT(current); // Update current to the next block
+                return allocated_memory;
+            }
+        }
+        current = GET_NEXT(current); // Move to the next block
+    } while (current != search_start); // Loop until we return to the starting block
+    
+    printf("Allocation failed for %zu bytes\n", aligned_size); // Print if allocation fails
+    return NULL; // No suitable block found
 }
 
 
@@ -124,23 +124,29 @@ void* simple_malloc(size_t size) {
  * @param void *ptr Pointer to the memory to free.
  *
  */
-void simple_free(void * ptr) {
-  if (ptr == NULL) return;
 
-  BlockHeader* block = (BlockHeader*)((uintptr_t)ptr - sizeof(BlockHeader));
+void simple_free(void *ptr) {
+    if (ptr == NULL) return;
 
-  if (GET_FREE(block)) {
-    return;
-  }
+    BlockHeader *block = (BlockHeader *)((uintptr_t)ptr - sizeof(BlockHeader));
 
-  SET_NEXT(block, 1);
+    if (GET_FREE(block)) {
+        return; // Already free
+    }
 
-  BlockHeader* next_block = GET_NEXT(block);
+    SET_FREE(block, 1); // Mark the block as free
 
-  if (GET_FREE(next_block)) {
-    SET_NEXT(block, GET_NEXT(next_block));
-  }
+    // Attempt to merge with the next block if it's free and not the dummy block
+    BlockHeader *next_block = GET_NEXT(block);
+    while (GET_FREE(next_block) && next_block != first) {
+        SET_NEXT(block, GET_NEXT(next_block)); // Link to the block after next
+        next_block = GET_NEXT(block); // Update next_block to the new next block
+        printf("Freeing block at %p and merging with next block\n", (void*)block);
+    }
+
+    printf("Freeing block at %p\n", (void*)block);
 }
+
 
 /* Include test routines */
 

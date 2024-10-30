@@ -10,6 +10,7 @@
  */
 
 #include "mm.h"
+#include <stdint.h>
 
 #define ALLOCATE_SIZE    32*1024*1024                 // 32 MB
 #define SKEW_SIZE        10
