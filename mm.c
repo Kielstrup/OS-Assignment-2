@@ -125,7 +125,7 @@ void* simple_malloc(size_t size) {
  *
  */
 
-void simple_free(void *ptr) {
+void simple_free(void* ptr) {
     if (ptr == NULL) return;
 
     BlockHeader *block = (BlockHeader *)((uintptr_t)ptr - sizeof(BlockHeader));

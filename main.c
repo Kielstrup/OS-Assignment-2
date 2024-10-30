@@ -24,6 +24,7 @@ typedef struct Node {
 void add_element_to_collection(Node** head, Node** tail, int value) {
     // Allocate memory using simple_malloc
     Node* new_node = (Node*)simple_malloc(sizeof(Node));
+    printf("Allocated new node at %p\n", new_node);
     
     if (!new_node) {
         // Memory allocation error handling
@@ -46,6 +47,8 @@ void add_element_to_collection(Node** head, Node** tail, int value) {
     write_char('\n');
 }
 
+
+
 /* Function to remove the most recently added element from the linked list */
 void remove_last_added_element(Node** head, Node** tail) {
     // If the list is empty, there is nothing to remove
@@ -61,6 +64,8 @@ void remove_last_added_element(Node** head, Node** tail) {
         simple_free(to_remove);  // Use simple_free instead of free
     }
 }
+
+
 
 /* Function meant to print the entire collection with appropriate separators and commas */
 void print_collection(Node* head) {
@@ -125,6 +130,7 @@ while (1) {
         break;
     }
 }
+
 
 
     // Call to function for printing the collection as a list separated by commas
